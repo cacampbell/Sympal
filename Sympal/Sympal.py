@@ -21,16 +21,16 @@ class Sympa:
     def __enter__(self):
         return(self)
 
-    def __exit__(self, ex_type, ex_val, traceback):
-        self.log_out()
-        self.close()
-
     def __init__(self, url):
         self.url = url
         self.session = requests.session()
         self.lists = {}
 
-    def _logged_in(self, page):
+    def __exit__(self, ex_type, ex_val, traceback):
+        self.log_out()
+        self.close()
+
+    def __logged_in(self, page):
         return('action_logout' in page.text)
 
     def post(self, **kwargs):
@@ -69,7 +69,7 @@ class Sympa:
 
     def populate_all(self):
         page = self.get_page()
-        if self._logged_in(page):
+        if self.__logged_in(page):
             self.__populate_all(page)
         else:
             print("Cannot populate lists, not logged in!", file=stderr)
@@ -88,13 +88,13 @@ class Sympa:
             self.lists[name] = MailingList(self, name)
 
     def logged_in(self):
-        return(self._logged_in(self.get_page()))
+        return(self.__logged_in(self.get_page()))
 
     def log_in(self, email, password, populate=False):
         # 302 found when logged in, 200 when not but site is working
         login = self.post(action='login', email=email, passwd=password)
 
-        if not self._logged_in(login):
+        if not self.__logged_in(login):
             print('Unable to log in...', file=stderr)
         else:
             self.__get_list_names(login)
