@@ -590,7 +590,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         requests = add_requests + del_requests
         # determine the number of concurrent requests and make a Queue
         self.__send_concurrent_requests(requests)
-        self.update()
+        self.__update_subscribers()
 
     def __subs_from_list(self, subscribers):
         # Generate a list of subscribers from a possibly mixed list of str and
