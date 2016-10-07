@@ -365,7 +365,7 @@ class MailingList(object, metaclass=MailingList_Meta):
             rows = self.BOUNCING_XPATH(page_root)[0].findall('tr')[2:]
         except IndexError:  # Could not find this element on the page
             if not self._admin:
-                print(MailingList_Meta.AUTHMSG.format(self.name))
+                print(MailingList_Meta.AUTHMSG.format(self.name), file=stderr)
             else:
                 print("List '{}' has no bouncing subscriptions".format(
                     self.name), file=stderr)
@@ -437,7 +437,8 @@ class MailingList(object, metaclass=MailingList_Meta):
                 rows = self.ALT_XPATH(page_root)[0].findall('tr')[1:]
             except IndexError:
                 if not self._admin:
-                    print(MailingList_Meta.AUTHMSG.format(self.name))
+                    print(MailingList_Meta.AUTHMSG.format(self.name),
+                          file=stderr)
                 else:
                     print("List '{}' has no subscriptions".format(self.name),
                           file=stderr)
@@ -548,8 +549,8 @@ class MailingList(object, metaclass=MailingList_Meta):
         :param subscribers: obj: something convertible to dict<Subscriber>
         :return:
         """
-        # Convert possible input objects to dict<Subscriber>
-        subscribers = self.__subs_from_obj(subscribers).values()
+        # Convert possible input objects to dict<Subscriber>, then get values
+        subscribers = list(self.__subs_from_obj(subscribers).values())
         # get just the input emails
         emails = [x.email for x in subscribers]
         # Get just the emails from the current subscriptions
@@ -823,8 +824,7 @@ class Test_Sympa_MailingList(TestCase):
             print("Bouncing for list '{}'".format(name))
             bouncing = l.get_bouncing()
             if bouncing:
-                for email, sub in bouncing.items():
-                    print("Email: {}, Name: {}".format(email, sub.name))
+                print(bouncing)
 
     def test_get_subscribers_email_list(self):
         for name, l in self.sympa.lists.items():
@@ -841,6 +841,20 @@ class Test_Sympa_MailingList(TestCase):
             if email_list:
                 for email in email_list:
                     print("Email: {}".format(email))
+
+    def test_add_subscriber(self):
+        subscriber = "cacampbell@ucdavis.edu"
+        listname = environ['default_list']
+        self.sympa.lists[listname].add_subscriber(subscriber)
+
+    def test_remove_subscriber(self):
+        subscriber = "cacampbell@ucdavis.edu"
+        listname = environ['default_list']
+        self.sympa.lists[listname].remove_subscriber(subscriber)
+
+    def test_set_subscribers(self):
+        email_list = environ["test_email_list"]
+        self.sympa.lists[environ['default_list']].set_subscribers(email_list)
 
     def tearDown(self):
         self.sympa.log_out()
