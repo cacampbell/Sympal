@@ -376,6 +376,15 @@ class MailingList(object, metaclass=MailingList_Meta):
                                                  "%d %b %Y")
             return(d)
 
+        for subscriber in self._subscribers.values():
+            d = {}
+            d['bouncing'] = False
+            d['bounce_score'] = 'no score'
+            d['bounce_count'] = 0
+            d['first_bounce'] = None
+            d['last_bounce'] = None
+            subscriber.update_bouncing_info(**d)
+
         for tr in list_of_trs:
             # For each row of the bouncing subscribers table
             info = tr_to_subscriber_info(tr)
