@@ -333,7 +333,7 @@ class MailingList(object, metaclass=MailingList_Meta):
 
             while datetime.now() < timeout:
                 self.__get_review()
-                if self.review != page:  # nested comparison handled by python
+                if self.review.text != page.text:  # compare page text
                     break
                 sleep(freq.total_seconds())
 
@@ -616,8 +616,9 @@ class MailingList(object, metaclass=MailingList_Meta):
         # combine this list into one list of requests
         requests = add_requests + del_requests
         # determine the number of concurrent requests and make a Queue
-        self.__send_concurrent_requests(requests)
-        self.__update_subscribers(wait_for_update=True)
+        if requests:
+            self.__send_concurrent_requests(requests)
+            self.__update_subscribers(wait_for_update=True)
 
     def __subs_from_list(self, subscribers):
         # Generate a list of subscribers from a possibly mixed list of str and
