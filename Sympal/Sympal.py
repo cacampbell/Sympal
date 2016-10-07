@@ -553,17 +553,16 @@ class MailingList(object, metaclass=MailingList_Meta):
         subscribers = list(self.__subs_from_obj(subscribers).values())
         # get just the input emails
         emails = [x.email for x in subscribers]
-        self_subscribers = list(self._subscribers.values())
-        # Get just the emails from the current subscriptions
-        self_emails = [x.email for x in self_subscribers]
+        # self email list is keys for subscribers
+        self_emails = list(self._subscribers.keys())
         # S in input list, but S not in current list, so add S to current
-        a = [x for x in emails if x not in self_emails]
+        additions = [x for x in emails if x not in self_emails]
         # S in current list, but S not in input list, so remove S from current
-        d = [x for x in self_emails if x not in emails]
+        deletions = [x for x in self_emails if x not in emails]
         # Formulate requests for Subscribers to be added to the current
-        add_requests = [self.__add_subscriber_request(x) for x in a]
+        add_requests = [self.__add_subscriber_request(x) for x in additions]
         # Formulate deletion requests for Subscribers to be removed from current
-        del_requests = [self.__remove_subscriber_request(x) for x in d]
+        del_requests = [self.__remove_subscriber_request(x) for x in deletions]
         # combine this list into one list of requests
         requests = add_requests + del_requests
         # determine the number of concurrent requests and make a Queue
