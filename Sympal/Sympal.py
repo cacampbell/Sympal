@@ -663,12 +663,12 @@ class MailingList(object, metaclass=MailingList_Meta):
         # in a dictionary being converted to a list and back to a dictionary in
         # some cases -- but it also handles ill formed dictionaries as well
         def sub_list(subs):
-            if type(subs is list):
+            if type(subs) is list:
                 if all([type(x) is Subscriber for x in subs]):
                     return (subs)
                 else:
                     return (self.__subs_from_list(subs))
-            elif type(subs is dict):
+            elif type(subs) is dict:
                 if all([type(x) is Subscriber for x in subs.values()]):
                     return (subs.values())
                 else:
