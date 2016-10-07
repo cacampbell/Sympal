@@ -424,16 +424,16 @@ class MailingList(object, metaclass=MailingList_Meta):
                 if email not in found_emails:
                     self._subscribers.pop(email)
 
-    # TODO: Made it to here refactoring
-
     def __update_subscribers_from_root(self, page_root):
         # Update the subscribers of this MailingList from page root
         rows = []
 
         try:
+            # Table of subscribers
             rows = self.SUBSCRIBERS_XPATH(page_root)[0].findall('tr')[1:]
         except IndexError:
             try:
+                # If notification on form, then this is the table instead
                 rows = self.ALT_XPATH(page_root)[0].findall('tr')[1:]
             except IndexError:
                 if not self._admin:
@@ -445,6 +445,8 @@ class MailingList(object, metaclass=MailingList_Meta):
         self.__rows_to_Subscribers(rows)
 
     def get_subscribers_email_list(self, filename=None):
+        # User the subscriber dictionary to print a list of emails
+        # Alternatively, can use the following:
         # page = self.sympa.get_page('dump', self.name, 'light')
         # subscribers = [x for x in page.text.split('\n') if x is not '']
         subscribers = list(self.get_subscribers().keys())
@@ -458,16 +460,16 @@ class MailingList(object, metaclass=MailingList_Meta):
 
     def get_subscribers(self):
         """
-        Get a list of Subscribers for this MailingList
-        :return: list<Subscriber>: the subscriber list
+        Get the subscriber dictionary
+        :return: dict<Subscriber>: the subscriber dictionary
         """
         return(self._subscribers)
 
     def get_bouncing_email_list(self, filename=None):
         """
-        Return a list of emails (str), can be written to file
-        :filename: str: the name of the file to write to
-        :return: list: the list of emails
+        The a list of bouncing email addresses
+        :param filename: str: write list to this file
+        :return: list<str>: list of subscriber emails
         """
         subscribers = list(self.get_bouncing().keys())
 
@@ -480,16 +482,17 @@ class MailingList(object, metaclass=MailingList_Meta):
 
     def get_bouncing(self):
         """
-        Get a list of bouncing Subscribers for this MailingList
-        :return: list<Subscriber>: the bouncing subscribers
+        Get the dictionary of Bouncing subscribers
+        :return: dict<Subscriber>: The bouncing subscribers
         """
         # Each email:subscriber pair if that subscriber is bouncing
         return({e: s for e, s in self._subscribers.items() if s.bouncing})
 
     def __reset_bouncing_request(self, email):
         """
-        Generate a request to reset a user's bouncing status
-        :param: email: str: email address for the subscriber
+        Generate data for request to reset the bouncing email address
+        :param email: str: email address to reset
+        :return: dict: data for request
         """
         data = {'list': '{}'.format(self.name),
                 'previous_action': 'reviewbouncing',
@@ -499,7 +502,8 @@ class MailingList(object, metaclass=MailingList_Meta):
 
     def reset_bouncing(self):
         """
-        Reset email addresses that are bouncing for this MailingList
+        Reset the bouncing email addresses for this list
+        :return:
         """
         requests = []
 
@@ -512,35 +516,37 @@ class MailingList(object, metaclass=MailingList_Meta):
 
     def reset_bouncing_subscriber(self, email):
         """
-        Reset one subscriber whose address is bouncing
-        :param: email: str: email address for the subscriber to reset
+        Reset a single bouncing subscriber
+        :param email: str: email to reset
+        :return: response: the result of the reset request
         """
-        data = self.__reset_bouncing_request(email)
-        response = self.sympa.post(**data)
-        self.__update_from_review_bouncing()
+        data = self.__reset_bouncing_request(email)  # Data to be sent
+        response = self.sympa.post(**data)  # Post the data
+        self.__update_from_review_bouncing()  # Update bouncing information
         return(response)
 
     def remove_bouncing_subscribers(self):
         """
-        Remove subscribers that are bouncing from the list
+        Delete all bouncing email addresses from the list
+        :return:
         """
-        bouncing = self.get_bouncing().keys()
+        bouncing = list(self.get_bouncing().keys())  # list of email adddresses
         requests = []
 
-        for subscriber in bouncing:
+        for subscriber in bouncing:  # Add a request to the list for each email
             requests += [self.__remove_subscriber_request(subscriber)]
 
-        self.__send_concurrent_requests(requests)
-        self.__update_subscribers()
+        self.__send_concurrent_requests(requests)  # send all requests
+        self.__update_subscribers()  # Update subscriber information
 
     def set_subscribers(self, subscribers):
         """
-        Update this MailingList and Sympa to a new subscriber list
-
-        Compares the given subscriber list to the current updated list and
-        determines requests that must be made to make the current list match
-        the provided list (in terms of Subscriber identity)
-        :param: subscribers: obj: Mixed objects signifying Subscribers
+        Set the subscribers for the current list. First, determine which email
+        addresses must be added, then determine which need to be removed. For
+        each of these email addresses (and actions), generate a request. Then,
+        send the requests concurrently.
+        :param subscribers: obj: something convertible to dict<Subscriber>
+        :return:
         """
         # Convert possible input objects to dict<Subscriber>
         subscribers = self.__subs_from_obj(subscribers).values()
@@ -563,14 +569,16 @@ class MailingList(object, metaclass=MailingList_Meta):
         self.update()
 
     def __send_concurrent_requests(self, requests):
-        concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS
-        q = Queue(concurrent * 2)
+        # Sends concurrent requests through the session using the predefined
+        # max concurrent threads
+        concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS  # concurrent lim
+        q = Queue(concurrent * 2)  # large Queue
 
         def worker():
             # Worker posts the request
             while True:
-                data = q.get()
-                self.sympa.post(**data)
+                data = q.get()  # Request data from some __request method
+                self.sympa.post(**data)  # Post this request
                 q.task_done()
 
         # create a number of workers equal to the concurrency limit, start them
@@ -584,11 +592,8 @@ class MailingList(object, metaclass=MailingList_Meta):
             q.put(request)
 
     def __subs_from_list(self, subscribers):
-        """
-        Convert a mixed list into a list of Subscribers
-        :param: subscribers: list: a list of strings, Subscribers
-        :return: list<Subscriber>: The converted list of Subscribers
-        """
+        # Generate a list of subscribers from a possibly mixed list of str and
+        # Subscriber
         new_subscriber_list = []
 
         for item in subscribers:
@@ -613,12 +618,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         return(new_subscriber_list)
 
     def __subs_from_dict(self, subscribers):
-        """
-        Convert a dictionary into a list of Subscribers, assuming email: name
-        pairs compose the dictionary, or rather <str>: <str> pairs
-        :param: subscribers: dict: a dictionary of subscribers
-        :return: list<Subscriber>: The converted list of Subscribers
-        """
+        # Create list<Subscriber> from some dictionary of email: name pairs
         new_subscriber_list = []
 
         for email, name in subscribers.items():
@@ -628,22 +628,17 @@ class MailingList(object, metaclass=MailingList_Meta):
         return(new_subscriber_list)
 
     def __subs_from_file(self, subscribers):
-        """
-        read a file and extract <str> email: <str> name pairs, then create a
-        list of Subscribers from it
-        :param: subscribers: str: filename to be read
-        :return: list<Subscriber>: The Subscriber list
-        """
+        # Parse file of name\temail lines, and convert them to dict<Subscriber>
         new_subscriber_list = []
 
         with open(subscribers, 'r+') as f_h:
             for line in f_h.readlines():
                 chunks = line.split()
-                email = chunks[0].strip()
+                email = chunks[0].strip()  # [email] First Last
                 name = ""
 
-                if len(chunks) == 2:
-                    name = " ".join(chunks[1:]).strip()
+                if len(chunks) == 2:  # IF email First Last
+                    name = " ".join(chunks[1:]).strip()  # email [First Last]
 
                 s = Subscriber(email=email, name=name, mailing_list=self)
                 new_subscriber_list += [s]
@@ -686,6 +681,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         return (__sub_d(sub_list(subscribers)))
 
     def __add_subscriber_request(self, email, real_name=""):
+        # Request data for adding a subscriber
         data = {'list': '{}'.format(self.name),
                 'action_add': 'Add subscribers',
                 'quiet': 'on',
@@ -695,12 +691,19 @@ class MailingList(object, metaclass=MailingList_Meta):
         return(data)
 
     def add_subscriber(self, email, real_name=""):
+        """
+        Add a subscriber to this MailingList
+        :param email: str: the email address
+        :param real_name: str: the real name of the person being added
+        :return: response: the response of the request to add
+        """
         data = self.__add_subscriber_request(email, real_name)
         response = self.sympa.post(**data)
-        self.__update_subscribers()
+        self.__update_subscribers()  # Update subscribers after adding new user
         return(response)
 
     def __remove_subscriber_request(self, email):
+        # Request data for removing a subscriber
         data = {'list': '{}'.format(self.name),
                 'quiet': 'on',
                 'email': '{}'.format(email),
@@ -709,6 +712,11 @@ class MailingList(object, metaclass=MailingList_Meta):
         return(data)
 
     def remove_subscriber(self, email):
+        """
+        Remove a subcriber from this MailingList
+        :param email: str: the email address
+        :return:
+        """
         data = self.__remove_subscriber_request(email)
         response = self.sympa.post(**data)
         self.__update_subscribers()
@@ -716,16 +724,17 @@ class MailingList(object, metaclass=MailingList_Meta):
 
 
 class Subscriber:
-    """
-    Storage class for attributes relating to a subsriber.
-    """
+    # Attributes that are expected to belong to each Subscriber
     subscriber_info = ['email', 'name', 'picture', 'reception', 'sources',
                        'sub_date', 'last_update', 'mailing_list']
+    # Attributes describing the bouncing status of the Subscriber
     bouncing_info = ['bouncing', 'bounce_score', 'bounce_count', 'first_bounce',
                      'last_bounce']
+    # All recognized attributes
     recognized_attrs = subscriber_info + bouncing_info
 
     def __set_attributes(self, given_dict, allowed_keys):
+        # Set attributes of an instance from a dictionary
             for key in allowed_keys:
                 if key in given_dict.keys():
                     try:
@@ -753,7 +762,7 @@ class Subscriber:
             first_bounce,
             last_bounce
         """
-        try:
+        try:  # Make sure this has an email and a mailing list
             assert('email' in kwargs.keys())
             assert('mailing_list' in kwargs.keys())
         except AssertionError:
@@ -764,17 +773,29 @@ class Subscriber:
         self.__set_attributes(kwargs, self.recognized_attrs)
 
     def update_subscriber_info(self, **kwargs):
+        """
+        Update subscriber information from a dictionary. Checks the
+        supplied dictionary against the class subscriber information
+        key list, then updates any parameters that match.
+        :param kwargs: dict: parameters to update in this subscriber
+        :return:
+        """
         self.__set_attributes(kwargs, self.subscriber_info)
 
     def update_bouncing_info(self, **kwargs):
+        """
+        Update bouncing information from a dictionary. Checks the supplied
+        dictionary against the class bouncing information key list, then
+        updates any parameters that match.
+        :param kwargs: dict: parameters to update
+        :return:
+        """
         self.__set_attributes(kwargs, self.bouncing_info)
 
     def __repr__(self):
-        if hasattr(self, 'email') and hasattr(self, 'mailing_list'):
-            return ("<Subscriber '{}' of '{}'>".format(self.email,
-                                                       self.mailing_list))
-        else:
-            return ("<Subscriber>")
+        # <subscriber 'user@example.com' of '<MailingList 'example_list'>'>
+        return ("<Subscriber '{}' of '{}'>".format(self.email,
+                                                   self.mailing_list))
 
 
 class Test_Sympa_MailingList(TestCase):
