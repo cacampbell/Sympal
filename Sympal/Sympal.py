@@ -501,6 +501,29 @@ class MailingList(object, metaclass=MailingList_Meta):
                 'action_resetbounce': 'Reset errors for selected users'}
         return(data)
 
+    def __send_concurrent_requests(self, requests):
+        # Sends concurrent requests through the session using the predefined
+        # max concurrent threads
+        concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS  # concurrent lim
+        q = Queue(concurrent * 2)  # large Queue
+
+        def worker():
+            # Worker posts the request
+            while True:
+                data = q.get()  # Request data from some __request method
+                self.sympa.post(**data)  # Post this request
+                q.task_done()
+
+        # create a number of workers equal to the concurrency limit, start them
+        for i in range(concurrent):
+            t = Thread(target=worker)
+            t.daemon = True
+            t.start()
+
+        # Send requests to the queue to be executed by workers
+        for request in requests:
+            q.put(request)
+
     def reset_bouncing(self):
         """
         Reset the bouncing email addresses for this list
@@ -568,29 +591,6 @@ class MailingList(object, metaclass=MailingList_Meta):
         # determine the number of concurrent requests and make a Queue
         self.__send_concurrent_requests(requests)
         self.update()
-
-    def __send_concurrent_requests(self, requests):
-        # Sends concurrent requests through the session using the predefined
-        # max concurrent threads
-        concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS  # concurrent lim
-        q = Queue(concurrent * 2)  # large Queue
-
-        def worker():
-            # Worker posts the request
-            while True:
-                data = q.get()  # Request data from some __request method
-                self.sympa.post(**data)  # Post this request
-                q.task_done()
-
-        # create a number of workers equal to the concurrency limit, start them
-        for i in range(concurrent):
-            t = Thread(target=worker)
-            t.daemon = True
-            t.start()
-
-        # Send requests to the queue to be executed by workers
-        for request in requests:
-            q.put(request)
 
     def __subs_from_list(self, subscribers):
         # Generate a list of subscribers from a possibly mixed list of str and
