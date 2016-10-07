@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 from datetime import datetime
 from datetime import timedelta
-from lxml import etree
 from os import environ
 from os.path import isfile
 from queue import Queue
-import requests
 from sys import stderr
 from threading import Thread
 from unittest import TestCase
 from unittest import TestLoader
 from unittest import TextTestRunner
 
+import requests
+from lxml import etree
+
 
 class Sympa:
-    # looked at Sympa page source to determine this information after login
+    # XPath for the 'list of lists' on sympa home page
     LISTS_XPATH = etree.XPath('//*[@id="Menus"]/div[3]/ul/li/a/@href')
     MAX_CONCURRENT_REQUEST_THREADS = 4
 
@@ -31,27 +32,18 @@ class Sympa:
         self.close()
 
     def __logged_in(self, page):
+        # Check a page for the ability to log out -- signifying logged in
         return('action_logout' in page.text)
 
-    def post(self, **kwargs):
-        page = self.session.post(url=self.url, data=kwargs)
-        return(page)
-
-    def get_page(self, *args):
-        uri = '{0}/{1}'.format(self.url, '/'.join(args))
-        return(self.session.get(uri))
-
-    def get_page_root(self, page):
-        return(etree.HTML(page.content))
-
     def __populate_all_lists(self):
+        # Populate all lists using concurrent requests
         concurrent = self.MAX_CONCURRENT_REQUEST_THREADS
         q = Queue(concurrent * 2)
 
         def populate():
             while True:
                 name = q.get()
-                self.lists[name].update()
+                self.lists[name].update()  # Update the MailingList
                 q.task_done()
 
         for i in range(concurrent):
@@ -64,21 +56,13 @@ class Sympa:
 
         q.join()
 
-    def populate_list(self, list_name):
-        self.lists[list_name].update()
-
-    def populate_all(self):
-        page = self.get_page()
-        if self.__logged_in(page):
-            self.__populate_all(page)
-        else:
-            print("Cannot populate lists, not logged in!", file=stderr)
-
     def __populate_all(self, page):
+        # Get list names, then populate all lists
         self.__get_list_names(page)
         self.__populate_all_lists()
 
     def __get_list_names(self, page):
+        # Get the names of lists from the sidebar 'list of lists'
         root = self.get_page_root(page)
         links = self.LISTS_XPATH(root)
         names = (link.rsplit('/', 1)[1] for link in links)
@@ -87,29 +71,101 @@ class Sympa:
         for name in names:
             self.lists[name] = MailingList(self, name)
 
+    def get_page(self, *args):
+        """
+        Get a page using the current session and sympa url, where args
+        signify parts of a uri to be appended
+        :param args: list<str>: / split parts of a uri to be appended to url
+        :return: response: The results of the get request (the page)
+        """
+        uri = '{0}/{1}'.format(self.url, '/'.join(args))
+        return (self.session.get(uri))
+
+    def get_page_root(self, page):
+        """
+        Get the root element of the supplied page
+        :param page: response: the page from which to get the root
+        :return:  ElementTree: the root of the page
+        """
+        return (etree.HTML(page.content))
+
+    def post(self, **kwargs):
+        """
+        Send a post request using the current session
+        :param kwargs: dict: request data to be sent
+        :return:
+        """
+        page = self.session.post(url=self.url, data=kwargs)
+        return (page)
+
+    def populate_list(self, list_name):
+        """
+        Populate a single MailingList object by calling its update method
+        :param list_name: str: the name of the list to update
+        :return:
+        """
+        self.lists[list_name].update()
+
+    def populate_all(self):
+        """
+        Populate all lists by calling their update methods
+        :return:
+        """
+        page = self.get_page()
+        if self.__logged_in(page):
+            self.__populate_all(page)
+        else:
+            print("Cannot populate lists, not logged in!", file=stderr)
+
     def logged_in(self):
+        """
+        Check if currently logged in
+        :return: bool: whether or not the current session is logged in
+        """
         return(self.__logged_in(self.get_page()))
 
     def log_in(self, email, password, populate=False):
-        # 302 found when logged in, 200 when not but site is working
-        login = self.post(action='login', email=email, passwd=password)
+        """
+        Log in using email and password, optionally, populate all lists
+        :param email: str: the log in email address for sympa
+        :param password: str: the password for the log in email address
+        :param populate: bool: whether or not to populate all lists on log in
+        :return:
+        """
+        # Post login action, using the following data:
+        login_request = {'action': 'login',
+                         'email': '{}'.format(email),
+                         'passwd': '{}'.format(password)}
+        login = self.post(**login_request)
 
         if not self.__logged_in(login):
             print('Unable to log in...', file=stderr)
         else:
+            # Get the list names regardless of population
             self.__get_list_names(login)
 
             if populate:
+                # populate all lists for this user
                 self.__populate_all_lists()
 
     def log_out(self):
+        """
+        Log out of the current session
+        :return:
+        """
         self.post(action='logout')
 
     def close(self):
+        """
+        Close the connection of the current session
+        :return:
+        """
         self.post(body={}, headers={'Connection': 'close'})
 
 
 class MailingList_Meta(type):
+    # The methods that require the user to be both logged in and have admin
+    # privileges for the list instance
     ADMIN_METHODS = ['get_subscribers_email_list',
                      'get_bouncing_email_list',
                      'get_subscribers',
@@ -132,22 +188,34 @@ class MailingList_Meta(type):
         does not have admin / mod access to the current list information
         :return: func: wrapped function that checks instance ownership and then
         performs the original action of the method.
+        :param func: function: the method to be wrapped
+        :return: function: the wrapped function
         """
         def check_populated_before_exec(self, *args, **kwargs):
+            """
+            Check that the subscribers have been fully populated and that the
+            user is an administrator for this list instance.
+            :param self: MailingList: this
+            :param args: list: positional arguments
+            :param kwargs: dict: keyword arguments
+            :return:
+            """
+            # First update the given list, to populate subscribers, and check
+            # the ownership
             self.update()
-            if self._owner:
+
+            if self._admin:  # Current user has admin privileges on the list
                 return(func(self, *args, **kwargs))
-            else:
+            else:  # No admin privileges -- don't make requests, return None
                 print(cls.AUTHMSG.format(self.name), file=stderr)
                 return(None)
 
         return(check_populated_before_exec)
 
     def __new__(cls, name, bases, attrs):
-        """
-        Wrap the listed attributes of the MailingList class with checks for
-        ownership.
-        """
+        # When a new instance of MailingList is created, wrap the attributes
+        # of that instance if they are in the list of attributes to wrap (if
+        # they require updated subscribers and admin privileges)
         for m in cls.ADMIN_METHODS:
             if m in attrs:
                 attrs[m] = cls.create_check_populated_before_exec(attrs[m])
@@ -156,34 +224,43 @@ class MailingList_Meta(type):
 
 
 class MailingList(object, metaclass=MailingList_Meta):
+    # Roles that signify admin privileges (I think)
     PRIV_ROLES = ['Privileged owner',
                   'Owner',
                   'Moderator',
                   'Privileged moderator']
+    # XPath for the role of the current user
     PRIV_XPATH = etree.XPath('//*[@id="Identity"]/text()')
     # About <tbody/> tags:
     # http://stackoverflow.com/questions/18241029/why-does-my-xpath-query-
     # scraping-html-tables-only-work-in-firebug-but-not-the
     # http://stackoverflow.com/questions/1678494/why-does-firebug-add-
     # tbody-to-table/1681427#1681427
+    #
+    # Xpath for the table of subscribers on the review page
     SUBSCRIBERS_XPATH = etree.XPath(('//*[@id="Paint"]/div[4]/div/form[4]'
                                     '/fieldset/table'))
+    # But, if there is a notification at the top of the form containing the
+    # review subscribers table, then this is the XPath for that table
     ALT_XPATH = etree.XPath(('//*[@id="Paint"]/div[4]/div[2]/form[5]/'
                             'fieldset/table'))
+    # On review bouncing page, the table containing bouncing info XPath...
     BOUNCING_XPATH = etree.XPath(('//*[@id="Paint"]/div[4]/form[4]/'
                                  'fieldset/table'))
 
+    # How frequently to update the MailingList instances in minutes
     UPDATE_MINS = 5
 
     def __init__(self, sympa, name):
         self.sympa = sympa
         self.name = name
-        self._owner = False
+        self._admin = False
         self._subscribers = {}
+        # URI for subscribers and bouncing, showing up to 10,000 members
         self.review_uri = ('?sortby=email&action='
-                           'review&list={}&size=1000').format(self.name)
+                           'review&list={}&size=10000').format(self.name)
         self.review_bouncing_uri = ('?sortby=email&action=reviewbouncing&'
-                                    'list={}&size=1000').format(self.name)
+                                    'list={}&size=10000').format(self.name)
         self.review = None
         self.review_bouncing = None
         self._last_updated = datetime.now()
@@ -192,28 +269,37 @@ class MailingList(object, metaclass=MailingList_Meta):
         return("<MailingList '{}'>".format(self.name))
 
     def __needs_update(self):
+        # If this instance needs to be updated, which is when:
+        # It hasn't been updated in the last UPDATE_MINS,
+        # There is no subscribers page,
+        # There is no bouncing page,
+        # The subscribers list == None (not initialized)
         difference = datetime.now() - self._last_updated
         outdated = (difference > timedelta(minutes=self.UPDATE_MINS))
         update = \
-            not self.review or \
+            self.review == None or \
             not self._subscribers or \
             not self.review_bouncing or \
             outdated
         return(update)
 
     def update(self):
+        # Update this instance if it needs to be updated
         if self.__needs_update():
-            self.__get_review()
-            self.__get_review_bouncing()
-            self.__check_ownership()
-            self.__update_subscribers()
+            self.__get_review()  # Update review page
+            self.__get_review_bouncing()  # Update review bouncing page
+            self.__check_admin()  # Update admin privileges
+            self.__update_subscribers()  # Update subscriber list
 
     def __update_subscribers(self):
-        self.__update_non_bouncing_subscribers()
-        self.__update_bouncing()
+        # Get all of the subscribers, populate listed information, then, fill
+        # in information obtained from the review bouncing page, set last update
+        self.__update_from_review()
+        self.__update_from_review_bouncing()
         self._last_updated = datetime.now()
 
-    def check_owner(self):
+    def check_admin(self):
+        # Check admin privileges
         page = self.review
         priv = self.PRIV_XPATH(self.sympa.get_page_root(page))
         if any(x in priv[1] for x in self.PRIV_ROLES):
@@ -221,26 +307,32 @@ class MailingList(object, metaclass=MailingList_Meta):
 
         return(False)
 
-    def __check_ownership(self):
-        self._owner = self.check_owner()
+    def __check_admin(self):
+        # Update stored admin privileges
+        self._admin = self.check_admin()
 
     def __get_review(self):
+        # Get the review page for this list
         self.review = self.sympa.get_page(self.review_uri)
 
     def __get_review_bouncing(self):
+        # Get the review bouncing page for this list
         self.review_bouncing = self.sympa.get_page(self.review_bouncing_uri)
 
-    def __update_non_bouncing_subscribers(self):
+    def __update_from_review(self):
+        # Get the subscribers from the review page, update information
         page = self.review
         page_root = self.sympa.get_page_root(page)
         self.__update_subscribers_from_root(page_root)
 
-    def __update_bouncing(self):
+    def __update_from_review_bouncing(self):
+        # Get information from the review bouncing page, update subscribers
         page = self.review_bouncing
         page_root = self.sympa.get_page_root(page)
         self.__update_bouncing_from_root(page_root)
 
     def __update_subscriber_bouncing_info(self, list_of_trs):
+        # Parse information from the table on the review bouncing page
         def tr_to_subscriber_info(tr):
             # See the following for datetime formatting:
             # https://docs.python.org/2/library/datetime.html#
@@ -258,18 +350,21 @@ class MailingList(object, metaclass=MailingList_Meta):
             return(d)
 
         for tr in list_of_trs:
+            # For each row of the bouncing subscribers table
             info = tr_to_subscriber_info(tr)
             self._subscribers[info['email']].update_bouncing_info(**info)
 
     def __update_bouncing_from_root(self, page_root):
+        # From the root of a page, find the rows of the bouncing subscribers
+        # table, and send that to be parsed, added to subscribers
         rows = None
 
         try:
             # Header of this table is actually in a form, with two rows of
             # table headers, and 5 columns of stats relating to bouncing emails
             rows = self.BOUNCING_XPATH(page_root)[0].findall('tr')[2:]
-        except IndexError:
-            if not self._owner:
+        except IndexError:  # Could not find this element on the page
+            if not self._admin:
                 print(MailingList_Meta.AUTHMSG.format(self.name))
             else:
                 print("List '{}' has no bouncing subscriptions".format(
@@ -279,12 +374,11 @@ class MailingList(object, metaclass=MailingList_Meta):
             self.__update_subscriber_bouncing_info(rows)
 
     def __rows_to_Subscribers(self, list_of_trs):
-        subscribers = []
-
+        # Parse the table of subscribers from the review page of this list
         def tr_to_subscriber_dict(tr):
             columns = tr.findall('td')
-            if len(columns) == 9:  # status notification
-                columns.pop(3)
+            if len(columns) == 9:  # status notification for a user
+                columns.pop(3)  # Remove status notification
 
             d = {}
             d['email'] = columns[1][0].text.strip()
@@ -297,6 +391,7 @@ class MailingList(object, metaclass=MailingList_Meta):
             d['last_update'] = datetime.strptime(columns[7].text.strip(),
                                                  "%d %b %Y")
             d['mailing_list'] = self
+            # Set bouncing info to default values for now
             d['bouncing'] = False
             d['bounce_score'] = 'no score'
             d['bounce_count'] = 0
@@ -304,13 +399,36 @@ class MailingList(object, metaclass=MailingList_Meta):
             d['last_bounce'] = None
             return(d)
 
-        for tr in list_of_trs:
-            subscribers += [Subscriber(**tr_to_subscriber_dict(tr))]
+        found_emails = []  # Keep track of the email addresses found
+        extant = True  # Assume subscribers not empty to start
 
-        return(subscribers)
+        if not self._subscribers:
+            extant = False  # was empty at start, actually
+            self._subscribers = {}  # Initialize it, in case it was None
+
+        for tr in list_of_trs:
+            # For each row, if there is an existing subscriber, update it,
+            # otherwise, create a new subscriber and add it.
+            data = tr_to_subscriber_dict(tr)
+            found_emails += [data['email']]
+
+            if data['email'] in self._subscribers.keys():
+                self._subscribers[data['email']].update_subscriber_info(**data)
+                # Do not updating bouncing information (with defaults)
+            else:
+                self._subscribers[data['email']] = Subscriber(**data)
+
+        if extant:  # The subscriber list was not empty at start of update
+            # Remove Subscribers that were not found on the review page
+            for email in list(self._subscribers.keys()):
+                if email not in found_emails:
+                    self._subscribers.pop(email)
+
+    # TODO: Made it to here refactoring
 
     def __update_subscribers_from_root(self, page_root):
-        rows = None
+        # Update the subscribers of this MailingList from page root
+        rows = []
 
         try:
             rows = self.SUBSCRIBERS_XPATH(page_root)[0].findall('tr')[1:]
@@ -318,29 +436,22 @@ class MailingList(object, metaclass=MailingList_Meta):
             try:
                 rows = self.ALT_XPATH(page_root)[0].findall('tr')[1:]
             except IndexError:
-                if not self._owner:
+                if not self._admin:
                     print(MailingList_Meta.AUTHMSG.format(self.name))
                 else:
                     print("List '{}' has no subscriptions".format(self.name),
                           file=stderr)
 
-        if rows:
-            self.__set_updated_subscribers(self.__rows_to_Subscribers(rows))
-        else:
-            self.__set_updated_subscribers([])
+        self.__rows_to_Subscribers(rows)
 
     def get_subscribers_email_list(self, filename=None):
-        """Returns the list of subscriber emails, can write list to a file
-        :param: filename: str: name of file to write subscriber list
-        :return: list: list of subscriber emails
-        """
         # page = self.sympa.get_page('dump', self.name, 'light')
         # subscribers = [x for x in page.text.split('\n') if x is not '']
-        subscribers = self.get_subscribers().keys()
+        subscribers = list(self.get_subscribers().keys())
 
         if filename:
             with open(filename, 'w+') as subscriber_list:
-                for email in subscribers.keys():
+                for email in subscribers:
                     print(email, file=subscriber_list)
 
         return(subscribers)
@@ -358,11 +469,11 @@ class MailingList(object, metaclass=MailingList_Meta):
         :filename: str: the name of the file to write to
         :return: list: the list of emails
         """
-        subscribers = self.get_bouncing().keys()
+        subscribers = list(self.get_bouncing().keys())
 
         if filename:
             with open(filename, 'w+') as bouncing_list:
-                for email in subscribers.keys():
+                for email in subscribers:
                     print(email, file=bouncing_list)
 
         return(subscribers)
@@ -397,7 +508,7 @@ class MailingList(object, metaclass=MailingList_Meta):
             requests += [reset_request]
 
         self.__send_concurrent_requests(requests)
-        self.__update_bouncing()
+        self.__update_from_review_bouncing()
 
     def reset_bouncing_subscriber(self, email):
         """
@@ -406,7 +517,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         """
         data = self.__reset_bouncing_request(email)
         response = self.sympa.post(**data)
-        self.__update_bouncing()
+        self.__update_from_review_bouncing()
         return(response)
 
     def remove_bouncing_subscribers(self):
@@ -422,10 +533,6 @@ class MailingList(object, metaclass=MailingList_Meta):
         self.__send_concurrent_requests(requests)
         self.__update_subscribers()
 
-    def __set_updated_subscribers(self, subscribers):
-        # __subs_from_obj returns a dictionary of email: Subscriber pairs
-        self._subscribers = self.__sub_d(self.__subs_from_obj(subscribers))
-
     def set_subscribers(self, subscribers):
         """
         Update this MailingList and Sympa to a new subscriber list
@@ -436,7 +543,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         :param: subscribers: obj: Mixed objects signifying Subscribers
         """
         # Convert possible input objects to dict<Subscriber>
-        subscribers = self.__sub_d(self.__subs_from_obj(subscribers).values())
+        subscribers = self.__subs_from_obj(subscribers).values()
         # get just the input emails
         emails = [x.email for x in subscribers]
         # Get just the emails from the current subscriptions
@@ -543,35 +650,40 @@ class MailingList(object, metaclass=MailingList_Meta):
 
         return(new_subscriber_list)
 
-    def __sub_d(self, list_of_Subscribers):
-        dictionary = {}
-
-        for sub in list_of_Subscribers:
-            dictionary[sub.email] = sub
-
-        return(dictionary)
-
     def __subs_from_obj(self, subscribers):
-        """
-        :param: subscribers: list,dict,str: a list of emails, a list of
-        subscribers, a dictionary of <email>:<name> pairs, or a file containing
-        rows of "<email> <name>"
-        """
-        if type(subscribers is list):
-            if all([type(x) is Subscriber for x in subscribers]):
-                return(subscribers)
-            else:
-                return(self.__subs_from_list(subscribers))
-        elif type(subscribers is dict):
-            if all([type(x) is Subscriber for x in subscribers.values()]):
-                return(subscribers.values())
-            else:
-                return(self.__subs_from_dict(subscribers))
-        elif type(subscribers) is str:
-            if isfile(subscribers):
-                return(self.__subs_from_file(subscribers))
+        # Convert the list of Subscribers to a dictionary
+        def __sub_d(list_of_Subscribers):
+            dictionary = {}
 
-        return([])
+            for sub in list_of_Subscribers:
+                dictionary[sub.email] = sub
+
+            return (dictionary)
+
+        # Early versions parsed the subscribers into a list, rather than a dict,
+        # and this function used to be the top level method that would handle
+        # incoming data. Rather than changing this handling, I just added
+        # a step to convert this list to a dictionary -- yes, this will result
+        # in a dictionary being converted to a list and back to a dictionary in
+        # some cases -- but it also handles ill formed dictionaries as well
+        def sub_list(subs):
+            if type(subscribers is list):
+                if all([type(x) is Subscriber for x in subs]):
+                    return (subscribers)
+                else:
+                    return (self.__subs_from_list(subs))
+            elif type(subscribers is dict):
+                if all([type(x) is Subscriber for x in subscribers.values()]):
+                    return (subscribers.values())
+                else:
+                    return (self.__subs_from_dict(subs))
+            elif type(subscribers) is str:
+                if isfile(subscribers):
+                    return (self.__subs_from_file(subs))
+
+            return ([])
+
+        return (__sub_d(sub_list(subscribers)))
 
     def __add_subscriber_request(self, email, real_name=""):
         data = {'list': '{}'.format(self.name),
@@ -658,8 +770,11 @@ class Subscriber:
         self.__set_attributes(kwargs, self.bouncing_info)
 
     def __repr__(self):
-        return("<Subscriber '{}' of '{}'>".format(self.email,
-                                                  self.mailing_list))
+        if hasattr(self, 'email') and hasattr(self, 'mailing_list'):
+            return ("<Subscriber '{}' of '{}'>".format(self.email,
+                                                       self.mailing_list))
+        else:
+            return ("<Subscriber>")
 
 
 class Test_Sympa_MailingList(TestCase):
