@@ -733,7 +733,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         """
         data = self.__add_subscriber_request(email, real_name)
         response = self.sympa.post(**data)
-        self.__update_subscribers()  # Update subscribers after adding new user
+        self.__update_subscribers(wait_for_update=True)  # Update
         return(response)
 
     def __remove_subscriber_request(self, email):
@@ -753,7 +753,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         """
         data = self.__remove_subscriber_request(email)
         response = self.sympa.post(**data)
-        self.__update_subscribers()
+        self.__update_subscribers(wait_for_update=True)
         return(response)
 
 
