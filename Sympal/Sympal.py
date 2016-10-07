@@ -553,12 +553,13 @@ class MailingList(object, metaclass=MailingList_Meta):
         subscribers = list(self.__subs_from_obj(subscribers).values())
         # get just the input emails
         emails = [x.email for x in subscribers]
+        self_subscribers = list(self._subscribers.values())
         # Get just the emails from the current subscriptions
-        self_emails = [x.email for x in self._subscribers.values()]
+        self_emails = [x.email for x in self_subscribers]
         # S in input list, but S not in current list, so add S to current
-        a = [x for x in subscribers if x.email not in self_emails]
+        a = [x for x in emails if x not in self_emails]
         # S in current list, but S not in input list, so remove S from current
-        d = [x for x in self._subscribers.values() if x.email not in emails]
+        d = [x for x in self_emails if x not in emails]
         # Formulate requests for Subscribers to be added to the current
         add_requests = [self.__add_subscriber_request(x) for x in a]
         # Formulate deletion requests for Subscribers to be removed from current
