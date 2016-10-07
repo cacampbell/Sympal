@@ -376,13 +376,15 @@ class MailingList(object, metaclass=MailingList_Meta):
                                                  "%d %b %Y")
             return(d)
 
+        d = {}
+        d['bouncing'] = False
+        d['bounce_score'] = 'no score'
+        d['bounce_count'] = 0
+        d['first_bounce'] = None
+        d['last_bounce'] = None
+
+        # Initialize bouncing info for each subscriber
         for subscriber in self._subscribers.values():
-            d = {}
-            d['bouncing'] = False
-            d['bounce_score'] = 'no score'
-            d['bounce_count'] = 0
-            d['first_bounce'] = None
-            d['last_bounce'] = None
             subscriber.update_bouncing_info(**d)
 
         for tr in list_of_trs:
@@ -614,7 +616,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         self.__send_concurrent_requests(requests)  # send all requests
         self.__update_subscribers(wait_for_update=True)  # Update
 
-    def set_subscribers(self, subscribers):
+    def set_subscribers(self, sub_obj):
         """
         Set the subscribers for the current list. First, determine which email
         addresses must be added, then determine which need to be removed. For
@@ -624,17 +626,20 @@ class MailingList(object, metaclass=MailingList_Meta):
         :return:
         """
         # Convert possible input objects to dict<Subscriber>, then get values
-        subscribers = list(self.__subs_from_obj(subscribers).values())
+        subscribers = self.__subs_from_obj(sub_obj)
+        subscribers_list = list(subscribers.values())
         # get just the input emails
-        emails = [x.email for x in subscribers]
+        emails = [x.email for x in subscribers_list]
         # self email list is keys for subscribers
         self_emails = list(self._subscribers.keys())
         # S in input list, but S not in current list, so add S to current
-        additions = [x for x in emails if x not in self_emails]
+        add_m = [x for x in emails if x not in self_emails]
+        __to_dict = lambda x: {'email': x.email, 'real_name': x.name}
+        additions = [__to_dict(subscribers[x]) for x in add_m]
         # S in current list, but S not in input list, so remove S from current
         deletions = [x for x in self_emails if x not in emails]
         # Formulate requests for Subscribers to be added to the current
-        add_requests = [self.__add_subscriber_request(x) for x in additions]
+        add_requests = [self.__add_subscriber_request(**x) for x in additions]
         # Formulate deletion requests for Subscribers to be removed from current
         del_requests = [self.__remove_subscriber_request(x) for x in deletions]
         # combine this list into one list of requests
@@ -660,13 +665,15 @@ class MailingList(object, metaclass=MailingList_Meta):
                                    mailing_list=self)
                     new_subscriber_list += [s]
                 else:
-                    print("Could not parse subscriber item: {}".format(item))
+                    print("Could not parse subscriber item: {}".format(item),
+                          file=stderr)
             elif type(item) is str:
-                s = Subscriber(email=item[0],
+                s = Subscriber(email=item,
                                mailing_list=self)
                 new_subscriber_list += [s]
             else:
-                print("Could not parse subscriber item: {}".format(item))
+                print("Could not parse subscriber item: {}".format(item),
+                      file=stderr)
 
         return(new_subscriber_list)
 
@@ -674,9 +681,12 @@ class MailingList(object, metaclass=MailingList_Meta):
         # Create list<Subscriber> from some dictionary of email: name pairs
         new_subscriber_list = []
 
-        for email, name in subscribers.items():
-            s = Subscriber(email=email, name=name, mailing_list=self)
-            new_subscriber_list += [s]
+        for key, value in subscribers.items():
+            if type(key) is str and type(value) is str:
+                s = Subscriber(email=key, name=value, mailing_list=self)
+                new_subscriber_list += [s]
+            elif type(key) is str and type(value) is Subscriber:
+                new_subscriber_list += [value]
 
         return(new_subscriber_list)
 
@@ -815,6 +825,10 @@ class Subscriber:
             first_bounce,
             last_bounce
         """
+        self.email = ""
+        self.name = ""
+        self.mailing_list = None
+
         try:  # Make sure this has an email and a mailing list
             assert('email' in kwargs.keys())
             assert('mailing_list' in kwargs.keys())
