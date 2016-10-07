@@ -6,6 +6,7 @@ from os.path import isfile
 from queue import Queue
 from sys import stderr
 from threading import Thread
+from time import sleep
 from unittest import TestCase
 from unittest import TestLoader
 from unittest import TextTestRunner
@@ -250,6 +251,8 @@ class MailingList(object, metaclass=MailingList_Meta):
 
     # How frequently to update the MailingList instances in minutes
     UPDATE_MINS = 5
+    TIMEOUT = 60
+    FREQUENCY = 10
 
     def __init__(self, sympa, name):
         self.sympa = sympa
@@ -291,11 +294,11 @@ class MailingList(object, metaclass=MailingList_Meta):
             self.__check_admin()  # Update admin privileges
             self.__update_subscribers()  # Update subscriber list
 
-    def __update_subscribers(self):
+    def __update_subscribers(self, wait_for_update=False):
         # Get all of the subscribers, populate listed information, then, fill
         # in information obtained from the review bouncing page, set last update
-        self.__update_from_review()
-        self.__update_from_review_bouncing()
+        self.__update_from_review(wait_for_update)
+        self.__update_from_review_bouncing(wait_for_update)
         self._last_updated = datetime.now()
 
     def check_admin(self):
@@ -319,16 +322,40 @@ class MailingList(object, metaclass=MailingList_Meta):
         # Get the review bouncing page for this list
         self.review_bouncing = self.sympa.get_page(self.review_bouncing_uri)
 
-    def __update_from_review(self):
+    def __update_from_review(self, wait_for_update=False):
         # Get the subscribers from the review page, update information
         page = self.review
-        page_root = self.sympa.get_page_root(page)
+
+        if wait_for_update:
+            # yes, timeout will be slightly less than expected, thats okay
+            freq = timedelta(seconds=self.FREQUENCY)
+            timeout = datetime.now() + timedelta(seconds=self.TIMEOUT)
+
+            while datetime.now() < timeout:
+                self.__get_review()
+                if self.review != page:  # nested comparison handled by python
+                    break
+                sleep(freq.total_seconds())
+
+        page_root = self.sympa.get_page_root(self.review)
         self.__update_subscribers_from_root(page_root)
 
-    def __update_from_review_bouncing(self):
+    def __update_from_review_bouncing(self, wait_for_update=False):
         # Get information from the review bouncing page, update subscribers
         page = self.review_bouncing
-        page_root = self.sympa.get_page_root(page)
+
+        if wait_for_update:
+            # yes, timeout will be slightly less than expected, thats okay
+            freq = timedelta(seconds=self.FREQUENCY)
+            timeout = datetime.now() + timedelta(seconds=self.TIMEOUT)
+
+            while datetime.now() < timeout:
+                self.__get_review_bouncing()
+                if self.review != page:  # nested comparison handled by python
+                    break
+                sleep(freq.total_seconds())
+
+        page_root = self.sympa.get_page_root(self.review_bouncing)
         self.__update_bouncing_from_root(page_root)
 
     def __update_subscriber_bouncing_info(self, list_of_trs):
@@ -505,7 +532,8 @@ class MailingList(object, metaclass=MailingList_Meta):
         # Sends concurrent requests through the session using the predefined
         # max concurrent threads
         concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS  # concurrent lim
-        q = Queue(concurrent * 2)  # large Queue
+        q = Queue(concurrent)  # large Queue
+        threads = []  # Keep track of dispatched threads
 
         def worker():
             # Worker posts the request
@@ -519,10 +547,15 @@ class MailingList(object, metaclass=MailingList_Meta):
             t = Thread(target=worker)
             t.daemon = True
             t.start()
+            threads += [t]
 
         # Send requests to the queue to be executed by workers
         for request in requests:
             q.put(request)
+
+        # Wait for all the threads to finish
+        for thread in threads:
+            thread.join()
 
     def reset_bouncing(self):
         """
@@ -536,7 +569,7 @@ class MailingList(object, metaclass=MailingList_Meta):
             requests += [reset_request]
 
         self.__send_concurrent_requests(requests)
-        self.__update_from_review_bouncing()
+        self.__update_from_review_bouncing(wait_for_update=True)
 
     def reset_bouncing_subscriber(self, email):
         """
@@ -546,7 +579,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         """
         data = self.__reset_bouncing_request(email)  # Data to be sent
         response = self.sympa.post(**data)  # Post the data
-        self.__update_from_review_bouncing()  # Update bouncing information
+        self.__update_from_review_bouncing(wait_for_update=True)
         return(response)
 
     def remove_bouncing_subscribers(self):
@@ -561,7 +594,7 @@ class MailingList(object, metaclass=MailingList_Meta):
             requests += [self.__remove_subscriber_request(subscriber)]
 
         self.__send_concurrent_requests(requests)  # send all requests
-        self.__update_subscribers()  # Update subscriber information
+        self.__update_subscribers(wait_for_update=True)  # Update
 
     def set_subscribers(self, subscribers):
         """
@@ -590,7 +623,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         requests = add_requests + del_requests
         # determine the number of concurrent requests and make a Queue
         self.__send_concurrent_requests(requests)
-        self.__update_subscribers()
+        self.__update_subscribers(wait_for_update=True)
 
     def __subs_from_list(self, subscribers):
         # Generate a list of subscribers from a possibly mixed list of str and
