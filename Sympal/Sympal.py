@@ -629,7 +629,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         return(new_subscriber_list)
 
     def __subs_from_file(self, subscribers):
-        # Parse file of name\temail lines, and convert them to dict<Subscriber>
+        # Parse file of 'email name' lines, and convert them to dict<Subscriber>
         new_subscriber_list = []
 
         with open(subscribers, 'r+') as f_h:
@@ -663,18 +663,18 @@ class MailingList(object, metaclass=MailingList_Meta):
         # in a dictionary being converted to a list and back to a dictionary in
         # some cases -- but it also handles ill formed dictionaries as well
         def sub_list(subs):
-            if type(subscribers is list):
+            if type(subs is list):
                 if all([type(x) is Subscriber for x in subs]):
-                    return (subscribers)
+                    return (subs)
                 else:
                     return (self.__subs_from_list(subs))
-            elif type(subscribers is dict):
-                if all([type(x) is Subscriber for x in subscribers.values()]):
-                    return (subscribers.values())
+            elif type(subs is dict):
+                if all([type(x) is Subscriber for x in subs.values()]):
+                    return (subs.values())
                 else:
                     return (self.__subs_from_dict(subs))
-            elif type(subscribers) is str:
-                if isfile(subscribers):
+            elif type(subs) is str:
+                if isfile(subs):
                     return (self.__subs_from_file(subs))
 
             return ([])
