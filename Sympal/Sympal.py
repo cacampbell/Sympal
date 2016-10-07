@@ -533,7 +533,6 @@ class MailingList(object, metaclass=MailingList_Meta):
         # max concurrent threads
         concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS  # concurrent lim
         q = Queue(concurrent)  # large Queue
-        threads = []  # Keep track of dispatched threads
 
         def worker():
             # Worker posts the request
@@ -547,15 +546,10 @@ class MailingList(object, metaclass=MailingList_Meta):
             t = Thread(target=worker)
             t.daemon = True
             t.start()
-            threads += [t]
 
         # Send requests to the queue to be executed by workers
         for request in requests:
             q.put(request)
-
-        # Wait for all the threads to finish
-        for thread in threads:
-            thread.join()
 
     def reset_bouncing(self):
         """
