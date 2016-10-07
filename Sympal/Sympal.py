@@ -532,24 +532,39 @@ class MailingList(object, metaclass=MailingList_Meta):
         # Sends concurrent requests through the session using the predefined
         # max concurrent threads
         concurrent = self.sympa.MAX_CONCURRENT_REQUEST_THREADS  # concurrent lim
-        q = Queue(concurrent)  # large Queue
+        q = Queue(concurrent * 2)  # queue twice as large as number of threads
+        threads = []
 
         def worker():
             # Worker posts the request
             while True:
                 data = q.get()  # Request data from some __request method
+
+                if data is None:
+                    break
+
                 self.sympa.post(**data)  # Post this request
                 q.task_done()
 
         # create a number of workers equal to the concurrency limit, start them
         for i in range(concurrent):
             t = Thread(target=worker)
-            t.daemon = True
             t.start()
+            threads += [t]
 
         # Send requests to the queue to be executed by workers
         for request in requests:
             q.put(request)
+
+        # Wait for all tasks to be done
+        q.join()
+
+        # stop workers
+        for i in range(concurrent):
+            q.put(None)
+
+        for t in threads:
+            t.join()
 
     def reset_bouncing(self):
         """
