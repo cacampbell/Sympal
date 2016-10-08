@@ -39,4 +39,7 @@ bounces.
             mailing_list.set_subscribers(["example1@example.com",
                                    "example2@example.com",
                                    "example3@example.com"])
+            
+            # Set subscribers to those contained in example_email_list.txt
+            mailing_list.set_subscribers("example_email_list.txt")
 
