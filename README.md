@@ -40,6 +40,6 @@ bounces.
                                    "example2@example.com",
                                    "example3@example.com"])
             
-            # Set subscribers to those contained in example_email_list.txt
-            mailing_list.set_subscribers("example_email_list.txt")
+            # Set subscribers to those contained in test_email_list.txt
+            mailing_list.set_subscribers("test_email_list.txt")
 
