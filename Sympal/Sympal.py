@@ -670,6 +670,7 @@ class MailingList(object, metaclass=MailingList_Meta):
                           file=stderr)
             elif type(item) is str:
                 s = Subscriber(email=item,
+                               name="",
                                mailing_list=self)
                 new_subscriber_list += [s]
             else:
