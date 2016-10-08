@@ -634,6 +634,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         self_emails = list(self._subscribers.keys())
         # S in input list, but S not in current list, so add S to current
         add_m = [x for x in emails if x not in self_emails]
+        # take a subscriber, return a dict of just the email and name
         __to_dict = lambda x: {'email': x.email, 'real_name': x.name}
         additions = [__to_dict(subscribers[x]) for x in add_m]
         # S in current list, but S not in input list, so remove S from current
@@ -700,7 +701,7 @@ class MailingList(object, metaclass=MailingList_Meta):
                 email = chunks[0].strip()  # [email] First Last
                 name = ""
 
-                if len(chunks) == 2:  # IF email First Last
+                if len(chunks) >= 2:  # IF email First Last
                     name = " ".join(chunks[1:]).strip()  # email [First Last]
 
                 s = Subscriber(email=email, name=name, mailing_list=self)
@@ -825,10 +826,6 @@ class Subscriber:
             first_bounce,
             last_bounce
         """
-        self.email = ""
-        self.name = ""
-        self.mailing_list = None
-
         try:  # Make sure this has an email and a mailing list
             assert('email' in kwargs.keys())
             assert('mailing_list' in kwargs.keys())
