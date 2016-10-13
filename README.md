@@ -49,7 +49,7 @@ script complex changes to lists saves me a lot of time.
             mailing_list.set_subscribers("test_email_list.txt")
 
 
-Alternatively, you can also create a Sympa object without a context manager:
+Alternatively, you can also create a Sympa object without context management:
 
     sympa = Sympa("http://lists.server.domain/sympa")
     sympa.log_in("email", "password")  # Log in
