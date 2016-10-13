@@ -1,6 +1,6 @@
 ###Sympal
 
-#####pip3 install Sympa
+####pip3 install Sympal
 
 A python3 API for basic administration tasks for Sympa mailing lists.
 
