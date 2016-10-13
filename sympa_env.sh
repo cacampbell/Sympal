@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Environment variables for testing
 export sympa_url=
 export admin_email=
 export admin_pass=

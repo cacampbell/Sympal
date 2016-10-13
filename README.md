@@ -2,10 +2,13 @@
 
 A python3 API for basic administration tasks for Sympa mailing lists.
 
-This package is not meant to replace the server side command line interface for
+This package is NOT meant to replace the server side command line interface for
 Sympa, but instead, is a management tool for users of an institutional Sympa
 server. With this package, you will be able to manage list subscriptions and
-bounces.
+bounces of your mailing lists with ease.
+
+I mostly wrote this because the Sympa web interface is clunky -- being able to
+script complex changes to lists saves me a lot of time.
 
     with Sympa("http://lists.server.domain/sympa") as sympa:
         sympa.log_in("email", "password")
@@ -40,3 +43,13 @@ bounces.
                                    "example2@example.com",
                                    "example3@example.com"])
 
+
+Alternatively, you can also create a Sympa object without a context manager:
+
+    sympa = Sympa("http://lists.server.domain/sympa")
+    sympa.log_in("email", "password")  # Log in
+    ...
+    subscribers = sympa.lists['list_name'].get_subscribers()  # Do things
+    ...
+    sympa.log_out()  # log out - normally called by __exit__
+    sympa.close()  # close connection - normally called by __exit__
