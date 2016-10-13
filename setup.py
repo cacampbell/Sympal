@@ -1,14 +1,14 @@
 from setuptools import setup
-from setuptools import find_packages
 from os import path
 
 here = path.abspath(path.dirname(__file__))
 
 setup(
     name='Sympal',
-    version='1.0.0',
+    version='0.1',
     description='Sympa list server management API for end users',
     url='https://github.com/cacampbell/Sympal',
+    download_url='https://github.com/cacampbell/Sympal/tarball/0.1',
     author='Chris Campbell',
     author_email='cacampbell@ucdavis.edu',
     license='MIT',
