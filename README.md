@@ -42,6 +42,9 @@ script complex changes to lists saves me a lot of time.
             mailing_list.set_subscribers(["example1@example.com",
                                    "example2@example.com",
                                    "example3@example.com"])
+            
+            # Set subscribers to those contained in test_email_list.txt
+            mailing_list.set_subscribers("test_email_list.txt")
 
 
 Alternatively, you can also create a Sympa object without a context manager:
