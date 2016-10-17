@@ -5,7 +5,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='Sympal',
-    version='0.1',
+    version='0.2',
     description='Sympa list server management API for end users',
     url='https://github.com/cacampbell/Sympal',
     download_url='https://github.com/cacampbell/Sympal/tarball/0.1',
