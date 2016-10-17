@@ -5,10 +5,11 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='Sympal',
-    version='0.2',
-    description='Sympa list server management API for end users',
+    packages=['Sympal'],
+    version='0.4',
+    description='Basic end user Sympa listserv management with Python requests',
     url='https://github.com/cacampbell/Sympal',
-    download_url='https://github.com/cacampbell/Sympal/tarball/0.1',
+    download_url='https://github.com/cacampbell/Sympal/tarball/0.4',
     author='Chris Campbell',
     author_email='cacampbell@ucdavis.edu',
     license='MIT',
@@ -20,6 +21,5 @@ setup(
         'Programming Language :: Python :: 3.5',
     ],
     keywords='sympa listserv requests',
-    py_modules=['Sympal'],
     install_requires=['DateTime', 'lxml', 'requests'],
 )
