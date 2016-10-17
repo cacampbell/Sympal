@@ -280,7 +280,7 @@ class MailingList(object, metaclass=MailingList_Meta):
         difference = datetime.now() - self._last_updated
         outdated = (difference > timedelta(minutes=self.UPDATE_MINS))
         update = \
-            self.review == None or \
+            self.review is None or \
             not self._subscribers or \
             not self.review_bouncing or \
             outdated
@@ -625,6 +625,9 @@ class MailingList(object, metaclass=MailingList_Meta):
         :param subscribers: obj: something convertible to dict<Subscriber>
         :return:
         """
+        def __to_dict(x):
+            return {'email': x.email, 'real_name': x.name}
+
         # Convert possible input objects to dict<Subscriber>, then get values
         subscribers = self.__subs_from_obj(sub_obj)
         subscribers_list = list(subscribers.values())
@@ -635,7 +638,6 @@ class MailingList(object, metaclass=MailingList_Meta):
         # S in input list, but S not in current list, so add S to current
         add_m = [x for x in emails if x not in self_emails]
         # take a subscriber, return a dict of just the email and name
-        __to_dict = lambda x: {'email': x.email, 'real_name': x.name}
         additions = [__to_dict(subscribers[x]) for x in add_m]
         # S in current list, but S not in input list, so remove S from current
         deletions = [x for x in self_emails if x not in emails]
@@ -698,15 +700,16 @@ class MailingList(object, metaclass=MailingList_Meta):
 
         with open(subscribers, 'r+') as f_h:
             for line in f_h.readlines():
-                chunks = line.split()
-                email = chunks[0].strip()  # [email] First Last
-                name = ""
+                if line is not "":
+                    chunks = line.split()
+                    email = chunks[0].strip()  # [email] First Last
+                    name = ""
 
-                if len(chunks) >= 2:  # IF email First Last
-                    name = " ".join(chunks[1:]).strip()  # email [First Last]
+                    if len(chunks) >= 2:  # IF email First Last
+                        name = " ".join(chunks[1:]).strip()  # email [Name Name]
 
-                s = Subscriber(email=email, name=name, mailing_list=self)
-                new_subscriber_list += [s]
+                    s = Subscriber(email=email, name=name, mailing_list=self)
+                    new_subscriber_list += [s]
 
         return(new_subscriber_list)
 
