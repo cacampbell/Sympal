@@ -6,10 +6,10 @@ here = path.abspath(path.dirname(__file__))
 setup(
     name='Sympal',
     packages=['Sympal'],
-    version='0.4',
+    version='0.5',
     description='Basic end user Sympa listserv management with Python requests',
     url='https://github.com/cacampbell/Sympal',
-    download_url='https://github.com/cacampbell/Sympal/tarball/0.4',
+    download_url='https://github.com/cacampbell/Sympal/tarball/0.5',
     author='Chris Campbell',
     author_email='cacampbell@ucdavis.edu',
     license='MIT',
